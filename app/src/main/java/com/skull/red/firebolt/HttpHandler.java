@@ -38,7 +38,7 @@ public class HttpHandler {
         }
         catch (Exception e)
         {
-            Log.e(TAG,"Exception "+e.getMessage());
+            Log.e(TAG,"Exception inhttp handler ");
         }
         return response;
     }
@@ -61,7 +61,6 @@ public class HttpHandler {
         {
             e.printStackTrace();
         }
-
         return  sb.toString();
     }
 }

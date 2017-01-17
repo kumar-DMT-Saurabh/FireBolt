@@ -1,10 +1,19 @@
 package com.skull.red.firebolt;
 
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.nfc.Tag;
 import android.os.AsyncTask;
+import android.support.annotation.BoolRes;
+import android.support.annotation.IntDef;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.SimpleAdapter;
@@ -15,6 +24,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.MissingFormatArgumentException;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -22,15 +32,22 @@ public class MainActivity extends AppCompatActivity {
     private String TAG =MainActivity.class.getSimpleName();
     private ListView lv;
 
-    ArrayList<HashMap<String,String>> contactList;
+    ArrayList<Repository> repoList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        contactList=new ArrayList<>();
+        repoList=new ArrayList<Repository>();
         lv=(ListView)findViewById(R.id.list);
+        lv.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            @Override
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                    onLongClick( lv,parent, view,  position, id);
+                return false;
+            }
+        });
 
         new GetContacts().execute();
     }
@@ -47,44 +64,38 @@ public class MainActivity extends AppCompatActivity {
         protected Void doInBackground(Void... params) {
 
             HttpHandler sh=new HttpHandler();
-            String url ="http://api.androidhive.info/contacts/";
+            String url ="https://api.github.com/users/xing/repos";
+//            String url ="http://api.androidhive.info/contacts/";
             String jsonStr =sh.makeServiceCall(url);
 
             Log.e(TAG,"Response from URL: "+jsonStr);
             if(jsonStr !=null){
                 try{
-                    JSONObject jsonObj = new JSONObject(jsonStr);
 
-                    //Getting  JSON Array node
-                    JSONArray contacts = jsonObj.getJSONArray("contacts");
+                    JSONArray jsonArray= new JSONArray(jsonStr);
 
-                    //looping through all contactd
-                    for (int i=0; i<contacts.length();i++) {
-                        JSONObject c = contacts.optJSONObject(i);
-                        String id = c.getString("id");
-                        String name = c.getString("name");
-                        String email = c.getString("email");
-                        String address = c.getString("address");
-                        String gender = c.getString("gender");
+                    for(int i=0;i<jsonArray.length();i++)
+                    {
+                        JSONObject infoObj= jsonArray.getJSONObject(i);
+                        String name=infoObj.getString("name");
+                        String desc=infoObj.getString("description");
+                        String htmlUrl=infoObj.getString("html_url");
+                        boolean fork=infoObj.getBoolean("fork");
 
-                        //Phone node is JSON Object
-                        JSONObject phone = c.getJSONObject("phone");
-                        String mobile = phone.getString("mobile");
-                        String home = phone.getString("home");
-                        String office = phone.getString("office");
+                        JSONObject ownerObj= infoObj.getJSONObject("owner");
+                        String login=ownerObj.getString("login");
+                        String ownerUrl=ownerObj.getString("html_url");
 
-                        // tmp hash map for single contact
-                        HashMap<String, String> contact = new HashMap<>();
-
-                        // adding each child node to HashMap key => value
-                        contact.put("id", id);
-                        contact.put("name", name);
-                        contact.put("email", email);
-                        contact.put("mobile", mobile);
-
-                        // adding contact to contact list
-                        contactList.add(contact);
+                        Repository repo=new Repository();
+                        repo.setOwnerUrl(ownerUrl);
+                        repo.setUrl(url);
+                        repo.setFork(fork);
+                        repo.setName(name);
+                        repo.setLogin(login);
+                        repo.setDescription(desc);
+                        repoList.add(repo);
                     }
+
                 }
                 catch (final Exception e)
                 {
@@ -93,7 +104,7 @@ public class MainActivity extends AppCompatActivity {
                         @Override
                         public void run() {
                             Toast.makeText(getApplicationContext(),
-                                    "Json parsing error: " + e.getMessage(),
+                                    "Json parsing error:  main activity",
                                     Toast.LENGTH_LONG).show();
                         }
                     });
@@ -118,10 +129,40 @@ public class MainActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
-            ListAdapter adapter = new SimpleAdapter(MainActivity.this,contactList,
-                    R.layout.list_item, new String[]{"email","mobile"},
-                    new int[]{R.id.email,R.id.mobile});
+
+            MyCustomAdapter adapter=new MyCustomAdapter(MainActivity.this,repoList);
+
             lv.setAdapter(adapter);
         }
+    }
+
+    private void onLongClick(ListView lv, AdapterView<?> parent, View view, int position, long id)
+    {
+        final Repository repo=(Repository) lv.getItemAtPosition(position);
+        repo.isFork();
+
+        AlertDialog.Builder alertDialogBuilder =    new AlertDialog.Builder(this);
+        alertDialogBuilder.setMessage(repo.getUrl()+ "  "+repo.getOwnerUrl());
+        alertDialogBuilder.setCancelable(true);
+        alertDialogBuilder.setPositiveButton("Owner Url", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                Uri uri =Uri.parse(repo.getOwnerUrl());
+                Intent intent=new Intent(Intent.ACTION_VIEW,uri);
+                startActivity(intent);
+            }
+        });
+        alertDialogBuilder.setNegativeButton("User Url", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                Uri uri =Uri.parse(repo.getUrl());
+                Intent intent=new Intent(Intent.ACTION_VIEW,uri);
+                startActivity(intent);
+            }
+        });
+
+        AlertDialog alertDialog = alertDialogBuilder.create();
+        alertDialog.show();
+
     }
 }
